@@ -46,8 +46,9 @@ ascii_conversion_map = {
     # Hungarian
     'ő': 'o', 'ű': 'u', 'Ő': 'O', 'Ű': 'U',
     # Common symbols
-    '\u2013': '-', '—': '-', ''': "'", ''': "'", '"': '"', '"': '"', # \u2013 is – (en dash)
-    '«': '"', '»': '"', '…': '...', '•': '*'
+    '\u2013': '-', '—': '-', ''': "'", ''': "'",  # en dash, left/right single quote
+    '"': '_', '*': 'x', '<': '(', '>': ')', '?': 'q', '|': '!', ':': '-', '«': '(', '»': ')',
+    '…': '...', '•': 'x'
 }
 
 def contains_non_ascii(text):
@@ -56,21 +57,32 @@ def contains_non_ascii(text):
 
 def convert_to_ascii(text):
     """Convert non-ASCII characters to ASCII equivalents"""
+    forbidden_chars = '\\/:*?"<>|'
+    unk_token = '_'
     if not contains_non_ascii(text):
-        return text
+        # Handle forbidden characters also for ASCII strings
+        return ''.join(unk_token if c in forbidden_chars else c for c in text)
     
     result = []
     for char in text:
         if ord(char) <= 127:
-            result.append(char)
+            # ASCII: check if forbidden
+            if char in forbidden_chars:
+                result.append(unk_token)
+            else:
+                result.append(char)
         elif char in ascii_conversion_map:
-            result.append(ascii_conversion_map[char])
+            # Conversion may produce forbidden characters, so filter them
+            for cc in ascii_conversion_map[char]:
+                if cc in forbidden_chars:
+                    result.append(unk_token)
+                else:
+                    result.append(cc)
         else:
             # Try Unicode normalization as fallback
             normalized = unicodedata.normalize('NFD', char)
-            ascii_char = ''.join(c for c in normalized if ord(c) <= 127)
-            result.append(ascii_char if ascii_char else '*')
-    
+            ascii_char = ''.join(c for c in normalized if ord(c) <= 127 and c not in forbidden_chars)
+            result.append(ascii_char if ascii_char else unk_token)
     return ''.join(result)
 
 def generate_unique_ascii_name(directory, base_name, extension):

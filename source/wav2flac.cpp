@@ -83,8 +83,9 @@ const std::map<char32_t, std::string> ascii_conversion_map = {
     // Hungarian
     {U'ő', "o"}, {U'ű', "u"}, {U'Ő', "O"}, {U'Ű', "U"},
     // Common symbols
-    {U'\u2013', "-"}, {U'—', "-"}, {U'\u2018', "'"}, {U'\u2019', "'"}, {U'"', "\""}, {U'"', "\""}, // – is \u2013 | ' is \u2018 | ' is \u2019
-    {U'«', "\""}, {U'»', "\""}, {U'…', "..."}, {U'•', "*"}
+    {U'\u2013', "-"}, {U'—', "-"}, {U'\u2018', "'"}, {U'\u2019', "'"}, // "u2013" is en dash, "U2018" is left single quote, "U2019" is right single quote
+    {U'"', "_"}, {U'*', "x"}, {U'<', "("}, {U'>', ")"}, {U'?', "q"}, {U'|', "!"}, {U':', "-"}, {U'«', "("}, {U'»', ")"},
+    {U'…', "..."}, {U'•', "x"}
 };
 
 // Helper function to check if an extension belongs to a category
@@ -117,8 +118,21 @@ std::u32string utf8_to_utf32(const std::string& utf8_str) {
 
 // Function to convert non-ASCII characters to ASCII equivalents
 std::string convert_to_ascii(const std::string& input) {
+    // Forbidden characters in filenames on Windows/Mac
+    static const std::string forbidden_chars = "\\/:*?\"<>|";
+    static const std::string unk_token = "_";
+
     if (!contains_non_ascii(input)) {
-        return input; // Already ASCII
+        // Handle forbidden characters also for ASCII strings
+        std::string result;
+        for (char c : input) {
+            if (forbidden_chars.find(c) != std::string::npos) {
+                result += unk_token;
+            } else {
+                result += c;
+            }
+        }
+        return result;
     }
     
     std::u32string utf32_str = utf8_to_utf32(input);
@@ -126,16 +140,27 @@ std::string convert_to_ascii(const std::string& input) {
     
     for (char32_t ch : utf32_str) {
         if (ch <= 127) {
-            // Already ASCII
-            result += static_cast<char>(ch);
+            // ASCII: check if forbidden
+            if (forbidden_chars.find(static_cast<char>(ch)) != std::string::npos) {
+                result += unk_token;
+            } else {
+                result += static_cast<char>(ch);
+            }
         } else {
             // Look for conversion in map
             auto it = ascii_conversion_map.find(ch);
             if (it != ascii_conversion_map.end()) {
-                result += it->second;
+                // The conversion may produce forbidden characters, so filter them
+                for (char cc : it->second) {
+                    if (forbidden_chars.find(cc) != std::string::npos) {
+                        result += unk_token;
+                    } else {
+                        result += cc;
+                    }
+                }
             } else {
-                // Unknown character, replace with *
-                result += "*";
+                // Unknown character, replace with [UNK]
+                result += unk_token;
             }
         }
     }
